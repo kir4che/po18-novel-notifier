@@ -58,11 +58,12 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
         priority: 1,
       });
     } catch (err) {
+      const errorMsg = err.message || "發生未知錯誤，請重試";
       await showNotification(`context-menu-error-${Date.now()}`, {
         type: "basic",
         iconUrl: "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48'><rect fill='%23F13392' width='48' height='48'/><text x='24' y='32' text-anchor='middle' fill='white' font-size='28' font-weight='bold'>!<​/text></svg>",
         title: "PO18 追更小幫手",
-        message: `無法加入追蹤：${err.message}`,
+        message: `無法加入追蹤：${escapeHtml(errorMsg)}`,
         priority: 1,
       });
     }
@@ -114,7 +115,12 @@ chrome.alarms.onAlarm.addListener((alarm) => {
   }
 });
 
-chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  // 驗證 message 來自擴展內部，不接受外部來源
+  if (sender.url && !sender.url.startsWith(chrome.runtime.getURL(""))) {
+    return false;
+  }
+
   if (message.type === "MANUAL_CHECK") {
     sendResponse({ ok: true });
     chrome.storage.local.set({ isChecking: true, checkLog: "[開始檢查...]" });
@@ -137,7 +143,12 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   }
 
   if (message.type === "UPDATE_INTERVAL") {
-    chrome.storage.local.set({ intervalMinutes: message.minutes }, () => {
+    const minutes = Number(message.minutes);
+    if (!Number.isInteger(minutes) || minutes < 1) {
+      sendResponse({ error: "無效的檢查間隔" });
+      return false;
+    }
+    chrome.storage.local.set({ intervalMinutes: minutes }, () => {
       setupAlarm(true).then(() => sendResponse({ ok: true }));
     });
     return true;
@@ -224,7 +235,8 @@ async function checkNovel(novel, allNovels) {
   const hasNewChapter = latestChapter && latestChapter !== novel.lastChapter;
 
   if (hasNewChapter) {
-    await showNotification(`update-${novel.url}`, {
+    const notificationId = `update-${novel.url.split("/").pop()}-${Date.now()}`;
+    await showNotification(notificationId, {
       type: "basic",
       iconUrl: ICONS.newChapter,
       title: `《${escapeHtml(novel.title)}》有新章節！`,

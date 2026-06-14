@@ -108,10 +108,11 @@ addBtn.addEventListener("click", async () => {
     const novel = await fetchNovelInfo(url);
     await saveNovel(novel);
     urlInput.value = "";
-    showStatus(`已加入追蹤：《${novel.title}》`, "success");
+    showStatus(`已加入追蹤：《${escapeHtml(novel.title)}》`, "success");
     await renderList();
   } catch (err) {
-    showStatus(err.message, "error");
+    const errorMsg = err.message || "發生未知錯誤，請重試";
+    showStatus(escapeHtml(errorMsg), "error");
   } finally {
     addBtn.disabled = false;
   }
@@ -152,7 +153,19 @@ chrome.storage.onChanged.addListener(async (changes) => {
 });
 
 async function fetchNovelInfo(url) {
-  const res = await fetch(url, { credentials: "include" });
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 10000);
+  let res;
+  try {
+    res = await fetch(url, { credentials: "include", signal: controller.signal });
+  } catch (err) {
+    if (err.name === "AbortError") {
+      throw new Error("讀取逾時，請檢查網路連接或稍後重試。");
+    }
+    throw new Error("讀取失敗，請檢查網路連接。");
+  } finally {
+    clearTimeout(timeoutId);
+  }
   const html = await res.text();
 
   if (

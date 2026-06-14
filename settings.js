@@ -27,6 +27,13 @@ document.addEventListener("DOMContentLoaded", async () => {
 
 intervalSelect.addEventListener("change", async () => {
   const minutes = Number(intervalSelect.value);
+  const validIntervals = [60, 120, 240, 480, 720, 1440];
+
+  if (!validIntervals.includes(minutes)) {
+    showStatus("無效的檢查間隔", "error");
+    return;
+  }
+
   await chrome.storage.local.set({ intervalMinutes: minutes });
   chrome.runtime.sendMessage({ type: "UPDATE_INTERVAL", minutes });
   showStatus(`已更新：每 ${minutes >= 60 ? minutes / 60 + " 小時" : minutes + " 分鐘"} 自動檢查一次`);
@@ -53,6 +60,13 @@ function updateDndUI(isEnabled, disabledUntil) {
 document.querySelectorAll(".dnd-time-btn").forEach(btn => {
   btn.addEventListener("click", async () => {
     const minutes = Number(btn.dataset.minutes);
+    const validDndMinutes = [60, 120, 240, 480, 720, 1440];
+
+    if (!Number.isInteger(minutes) || !validDndMinutes.includes(minutes)) {
+      showStatus("無效的時間設置", "error");
+      return;
+    }
+
     const disabledUntil = Date.now() + minutes * 60000;
     await chrome.storage.local.set({ notificationsDisabledUntil: disabledUntil });
     updateDndUI(true, disabledUntil);
