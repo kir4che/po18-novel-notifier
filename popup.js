@@ -203,7 +203,23 @@ async function fetchNovelInfo(url) {
     throw new Error("無法取得章節資訊，請確認網址是否為書籍頁面。");
   }
 
-  return { url, title, lastChapter, lastChapterLabel, addedAt: Date.now() };
+  // 從 dd.statu 元素中提取目前章回數
+  const statusEl = doc.querySelector("dd.statu");
+  let currentChapter = null;
+  if (statusEl) {
+    const text = statusEl.textContent;
+    const match = text.match(/(\d+)/);
+    if (match) {
+      currentChapter = parseInt(match[1], 10);
+    }
+  }
+
+  let finalLabel = lastChapterLabel;
+  if (finalLabel && currentChapter !== null) {
+    finalLabel = `${finalLabel}(${currentChapter})`;
+  }
+
+  return { url, title, lastChapter, lastChapterLabel: finalLabel, currentChapter, addedAt: Date.now() };
 }
 
 async function saveNovel(novel) {

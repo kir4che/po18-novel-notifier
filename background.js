@@ -2,9 +2,11 @@ const ALARM_NAME = "po18-check";
 const DEFAULT_INTERVAL_MINUTES = 120;
 
 function escapeHtml(str) {
-  const div = document.createElement('div');
-  div.textContent = str;
-  return div.innerHTML;
+  return str
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
 }
 
 const ICONS = {
@@ -230,7 +232,7 @@ async function checkNovel(novel, allNovels) {
     return;
   }
 
-  const { latestChapter, latestChapterLabel } = parsed;
+  const { latestChapter, latestChapterLabel, currentChapter } = parsed;
 
   const hasNewChapter = latestChapter && latestChapter !== novel.lastChapter;
 
@@ -248,7 +250,7 @@ async function checkNovel(novel, allNovels) {
   const { unreadCount = 0 } = await chrome.storage.local.get("unreadCount");
   const updatedNovels = allNovels.map((n) =>
     n.url === novel.url
-      ? { ...n, lastChapter: latestChapter, lastChapterLabel: latestChapterLabel }
+      ? { ...n, lastChapter: latestChapter, lastChapterLabel: latestChapterLabel, currentChapter }
       : n
   );
   await chrome.storage.local.set({
@@ -262,50 +264,24 @@ async function fetchNovelInfoFromUrl(url) {
   const res = await fetch(url, { credentials: "include" });
   const html = await res.text();
 
-  if (
-    res.url.includes("members.po18.tw/apps/login.php") ||
-    html.includes("請先登入") ||
-    html.includes('type="password"')
-  ) {
+  if (isLoginPage(res.url, html)) {
     throw new Error("PO18 登入憑證已過期");
   }
 
   const titleMatch = html.match(/<h1[^>]*class="book_name"[^>]*>([^<]+)<\/h1>/);
   const title = titleMatch ? titleMatch[1].trim() : "未知書名";
 
-  const newChapterMatch = html.match(/<div[^>]*class="new_chapter"[^>]*>([\s\S]*?)<\/div>/);
-  if (!newChapterMatch) {
+  if (!html.includes('class="new_chapter"')) {
     throw new Error("無法解析最新章節");
   }
 
-  const chapterTextMatch = html.match(/<h4[^>]*>([^<]+)<\/h4>/);
-  const lastChapterLabel = chapterTextMatch ? chapterTextMatch[1].trim() : null;
-
-  let dateText = null;
-  const dateFullMatch = html.match(/<div[^>]*class="date"[^>]*>([^<]*(?:<[^>]*>[^<]*)*)<\/div>/);
-  if (dateFullMatch) {
-    const dateContent = dateFullMatch[1];
-    const dateFormatMatch = dateContent.match(/(\d{4}-\d{2}-\d{2})/);
-    if (dateFormatMatch) {
-      dateText = dateFormatMatch[1];
-    } else {
-      dateText = dateContent.replace(/<[^>]*>/g, "").trim();
-    }
-  }
-
-  let lastChapter = null;
-  const hrefMatch = html.match(/href="([^"]*\/articles\/[^"]*)"/);
-  if (hrefMatch) {
-    lastChapter = hrefMatch[1];
-  } else if (lastChapterLabel && dateText) {
-    lastChapter = `${lastChapterLabel}|${dateText}`; // 付費章節備選
-  }
-
-  if (!lastChapter) {
+  const parsed = parseNovelPage(html);
+  if (!parsed) {
     throw new Error("無法取得章節資訊");
   }
 
-  return { url, title, lastChapter, lastChapterLabel, addedAt: Date.now() };
+  const { title, latestChapter, latestChapterLabel, currentChapter } = parsed;
+  return { url, title, lastChapter: latestChapter, lastChapterLabel: latestChapterLabel, currentChapter, addedAt: Date.now() };
 }
 
 function isLoginPage(finalUrl, html) {
@@ -344,5 +320,15 @@ function parseNovelPage(html) {
     return null;
   }
 
-  return { title: title || "未知書名", latestChapter, latestChapterLabel: chapterText };
+  const statusMatch = html.match(/class="statu"[^>]*>[^<]*<span[^>]*>\(目前(\d+)章回\)/);
+  let currentChapter = null;
+  let finalLabel = chapterText;
+  if (statusMatch) {
+    currentChapter = parseInt(statusMatch[1], 10);
+    if (finalLabel && currentChapter) {
+      finalLabel = `${finalLabel}（${currentChapter}）`;
+    }
+  }
+
+  return { title: title || "未知書名", latestChapter, latestChapterLabel: finalLabel, currentChapter };
 }
