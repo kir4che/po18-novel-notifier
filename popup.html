@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PO18 追更小幫手</title>
+  <style>
+    *, *::before, *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      width: 360px;
+      min-height: 200px;
+      font-family: "Noto Sans TC", "Microsoft JhengHei", sans-serif;
+      font-size: 14px;
+      color: #2d2d2d;
+      background: #fafafa;
+    }
+
+    header {
+      background: #F13392;
+      color: white;
+      padding: 12px 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+
+    header h1 {
+      font-size: 15px;
+      font-weight: 600;
+      letter-spacing: 0.5px;
+    }
+
+    .header-left {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex: 1;
+    }
+
+    .header-right {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+
+    #status-icon {
+      font-size: 12px;
+      font-weight: bold;
+      color: white;
+    }
+
+    #login-status-text {
+      font-size: 12px;
+      color: rgba(255, 255, 255, 0.8);
+    }
+
+    #login-btn {
+      margin-left: auto;
+      font-size: 11px;
+      padding: 4px 10px;
+      background: white;
+      border: 1px solid white;
+      color: #F13392;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: all 0.2s;
+      font-weight: 500;
+    }
+
+    #login-btn:hover {
+      background: rgba(255, 255, 255, 0.9);
+      color: #E61B84;
+    }
+
+    #settings-btn {
+      background: none;
+      border: none;
+      cursor: pointer;
+      padding: 2px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: opacity 0.2s;
+    }
+
+    #settings-btn:hover {
+      opacity: 0.8;
+    }
+
+    #check-btn {
+      background: none;
+      border: none;
+      color: #F13392;
+      cursor: pointer;
+      padding: 0;
+      font-size: 12px;
+      font-weight: 500;
+      text-decoration: none;
+    }
+
+    #check-btn:hover:not(:disabled) {
+      text-decoration: underline;
+      text-underline-offset: 2px;
+    }
+
+    #check-btn:disabled {
+      color: #ccc;
+      cursor: not-allowed;
+      opacity: 0.6;
+    }
+
+    .add-section {
+      padding: 12px 16px;
+      border-bottom: 1px solid #e5e5e5;
+      display: flex;
+      gap: 8px;
+    }
+
+    #url-input {
+      flex: 1;
+      padding: 7px 10px;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      font-size: 13px;
+      outline: none;
+    }
+
+    #url-input:focus { border-color: #F13392; }
+
+    #add-btn {
+      padding: 7px 14px;
+      background: #F13392;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      font-size: 13px;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+
+    #add-btn:hover { background: #E61B84; }
+    #add-btn:disabled { background: #ccc; cursor: not-allowed; }
+
+    .login-status {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 7px 16px;
+      font-size: 12px;
+      border-bottom: 1px solid #e5e5e5;
+      background: #f7f7f7;
+      color: #555;
+    }
+
+
+    .interval-section {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 16px;
+      border-bottom: 1px solid #e5e5e5;
+      font-size: 13px;
+      color: #555;
+    }
+
+    #interval-select {
+      padding: 4px 8px;
+      border: 1px solid #ccc;
+      border-radius: 5px;
+      font-size: 13px;
+      outline: none;
+      cursor: pointer;
+    }
+
+    #interval-select:focus { border-color: #F13392; }
+
+    #status-msg {
+      font-size: 12px;
+      color: #888;
+    }
+
+    #status-msg:not(:empty) { padding: 8px 16px; }
+
+    #status-msg.error { color: #F13392; }
+    #status-msg.success { color: #27ae60; }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .spinner {
+      display: inline-block;
+      width: 11px;
+      height: 11px;
+      border: 2px solid #ccc;
+      border-top-color: #F13392;
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      vertical-align: middle;
+      margin-right: 5px;
+    }
+
+    #novel-list {
+      list-style: none;
+      padding: 0;
+      max-height: 320px;
+      overflow-y: auto;
+    }
+
+    #novel-list .empty-msg {
+      padding: 24px 16px;
+      text-align: center;
+      color: #aaa;
+      font-size: 13px;
+    }
+
+    .novel-item {
+      display: flex;
+      align-items: center;
+      padding: 10px 16px;
+      border-bottom: 1px solid #f0f0f0;
+      gap: 10px;
+    }
+
+    .novel-item:last-child { border-bottom: none; }
+
+    .novel-info {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .novel-title {
+      display: block;
+      font-size: 13px;
+      font-weight: 600;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      color: #2d2d2d;
+      text-decoration: none;
+    }
+
+    .novel-title:hover { color: #F13392; }
+
+    .novel-chapter {
+      font-size: 11px;
+      color: #888;
+      margin-top: 2px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .delete-btn {
+      flex-shrink: 0;
+      background: none;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      padding: 3px 8px;
+      font-size: 11px;
+      color: #999;
+      cursor: pointer;
+    }
+
+    .delete-btn:hover {
+      background: #fee;
+      border-color: #F13392;
+      color: #F13392;
+    }
+
+    .dnd-btn {
+      flex: 1;
+      min-width: 70px;
+      padding: 6px 12px;
+      background: #f0f0f0;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      font-size: 12px;
+      color: #555;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .dnd-btn:hover {
+      background: #e8e8e8;
+      border-color: #999;
+    }
+
+    .dnd-btn.dnd-close {
+      background: #fee;
+      border-color: #F13392;
+      color: #F13392;
+    }
+
+    .dnd-btn.dnd-close:hover {
+      background: #fdd;
+    }
+
+    .footer-row {
+      padding: 10px 16px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-top: 1px solid #f0f0f0;
+    }
+
+    #last-check-time {
+      font-size: 12px;
+      color: #aaa;
+    }
+
+    .privacy-note {
+      padding: 10px 16px;
+      font-size: 11px;
+      color: #aaa;
+      border-top: 1px solid #f0f0f0;
+      line-height: 1.5;
+    }
+
+    .login-btn-hidden {
+      display: none;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="header-left">
+      <h1>PO18 追更小幫手</h1>
+      <span id="status-icon">⊙</span>
+      <span id="login-status-text">檢查登入狀態中…</span>
+    </div>
+    <div class="header-right">
+      <button id="login-btn" class="login-btn-hidden">登入</button>
+      <button id="settings-btn">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.1a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" />
+          <circle cx="12" cy="12" r="3" />
+        </svg>
+      </button>
+    </div>
+  </header>
+
+  <div class="add-section">
+    <input
+      id="url-input"
+      type="url"
+      placeholder="貼上 PO18 書籍網址…"
+    />
+    <button id="add-btn" disabled>加入追蹤</button>
+  </div>
+
+  <div id="status-msg"></div>
+
+  <ul id="novel-list">
+    <li class="empty-msg">尚無追蹤小說</li>
+  </ul>
+
+  <div class="footer-row">
+    <button id="check-btn">立即檢查</button>
+    <div id="last-check-time"></div>
+  </div>
+
+  <div class="privacy-note">
+    🔒 不儲存帳號密碼，僅讀取頁面內容，所有資料留於本機。
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

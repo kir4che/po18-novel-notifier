@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PO18 追更小幫手 - 設定</title>
+  <style>
+    *, *::before, *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: "Noto Sans TC", "Microsoft JhengHei", sans-serif;
+      font-size: 14px;
+      color: #2d2d2d;
+      background: #f5f5f5;
+      display: flex;
+      justify-content: center;
+      align-items: flex-start;
+      min-height: 100vh;
+      padding: 20px;
+    }
+
+    .container {
+      width: 100%;
+      max-width: 500px;
+      background: white;
+      border-radius: 8px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+      overflow: hidden;
+    }
+
+    header {
+      background: #F13392;
+      color: white;
+      padding: 20px;
+      text-align: center;
+    }
+
+    header h1 {
+      font-size: 18px;
+      font-weight: 600;
+      margin: 0;
+    }
+
+    .content {
+      padding: 0;
+    }
+
+    .settings-section {
+      padding: 20px;
+      border-bottom: 1px solid #e5e5e5;
+    }
+
+    .settings-section:last-child {
+      border-bottom: none;
+    }
+
+    .settings-section h2 {
+      font-size: 13px;
+      color: #666;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin: 0;
+      font-weight: 600;
+    }
+
+    .setting-item {
+      margin-bottom: 14px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .setting-item:last-child {
+      margin-bottom: 0;
+    }
+
+    .setting-label {
+      font-size: 14px;
+      color: #333;
+    }
+
+    .setting-desc {
+      font-size: 12px;
+      color: #999;
+      margin-top: 4px;
+    }
+
+    .dnd-setting {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .dnd-status {
+      width: 100%;
+      text-align: center;
+      color: #27ae60;
+      font-weight: 600;
+      font-size: 14px;
+      margin: 8px 0;
+    }
+
+    select {
+      padding: 6px 10px;
+      border: 1px solid #ccc;
+      border-radius: 5px;
+      font-size: 13px;
+      outline: none;
+      cursor: pointer;
+    }
+
+    select:focus {
+      border-color: #F13392;
+    }
+
+    .dnd-buttons {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+      width: 100%;
+    }
+
+    .dnd-time-btn {
+      padding: 10px 8px;
+      background: #f0f0f0;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      font-size: 12px;
+      color: #555;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .dnd-time-btn:hover {
+      background: #e8e8e8;
+      border-color: #999;
+    }
+
+    .dnd-time-btn.active {
+      background: #F13392;
+      border-color: #F13392;
+      color: white;
+    }
+
+    .dnd-close-btn {
+      grid-column: 1 / -1;
+      padding: 12px;
+      background: #F13392 !important;
+      border: none !important;
+      border-radius: 4px;
+      font-size: 13px;
+      color: white !important;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .dnd-close-btn:hover {
+      background: #E61B84 !important;
+      transform: translateY(-1px);
+      box-shadow: 0 2px 6px rgba(241, 51, 146, 0.3);
+    }
+
+    .status-msg {
+      padding: 12px;
+      font-size: 12px;
+      color: #27ae60;
+      text-align: center;
+      background: #f0f8f0;
+      display: none;
+      margin-top: 12px;
+    }
+
+    .status-msg.show {
+      display: block;
+    }
+
+    #export-btn, #import-btn {
+      transition: all 0.2s;
+    }
+
+    #export-btn:hover:not(:disabled), #import-btn:hover:not(:disabled) {
+      background: #E61B84;
+      transform: translateY(-1px);
+      box-shadow: 0 2px 6px rgba(241, 51, 146, 0.3);
+    }
+
+    #export-btn:disabled, #import-btn:disabled {
+      background: #ccc;
+      cursor: not-allowed;
+      opacity: 0.6;
+    }
+
+    .novel-count-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      margin-bottom: 12px;
+    }
+
+    .export-import-btns {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .dnd-label {
+      width: 100%;
+    }
+
+    #import-file {
+      display: none;
+    }
+
+    #novel-count {
+      font-size: 13px;
+      color: #666;
+    }
+
+    #export-btn, #import-btn {
+      padding: 8px 12px;
+      background: #F13392;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 13px;
+      transition: all 0.2s;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>設定</h1>
+    </header>
+
+    <div class="content">
+      <div class="settings-section">
+        <h2>自動檢查</h2>
+        <div class="setting-item">
+          <div>
+            <div class="setting-label">檢查間隔</div>
+            <div class="setting-desc">定時自動檢查新章節</div>
+          </div>
+          <select id="interval-select">
+            <option value="60">每 1 小時</option>
+            <option value="120" selected>每 2 小時</option>
+            <option value="240">每 4 小時</option>
+            <option value="480">每 8 小時</option>
+            <option value="720">每 12 小時</option>
+            <option value="1440">每 24 小時</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="settings-section">
+        <h2>勿擾模式</h2>
+        <div class="dnd-setting">
+          <div class="dnd-label">
+            <div class="setting-desc">啟用後不會顯示任何通知</div>
+          </div>
+          <div id="dnd-options" class="dnd-buttons">
+            <button class="dnd-time-btn" data-minutes="60">1小時</button>
+            <button class="dnd-time-btn" data-minutes="120">2小時</button>
+            <button class="dnd-time-btn" data-minutes="240">4小時</button>
+            <button class="dnd-time-btn" data-minutes="480">8小時</button>
+            <button class="dnd-time-btn" data-minutes="720">12小時</button>
+            <button class="dnd-time-btn" data-minutes="1440">24小時</button>
+            <button class="dnd-close-btn" id="dnd-close-btn" style="display: none;">關閉勿擾</button>
+          </div>
+          <div id="dnd-status" class="dnd-status"></div>
+        </div>
+      </div>
+
+      <div class="settings-section">
+        <div class="novel-count-row">
+          <h2>追蹤清單</h2>
+          <span id="novel-count">0 本</span>
+        </div>
+        <div class="export-import-btns">
+          <button id="export-btn">匯出清單</button>
+          <button id="import-btn">匯入清單</button>
+          <input type="file" id="import-file" accept=".json">
+        </div>
+      </div>
+
+      <div class="status-msg" id="status-msg"></div>
+    </div>
+  </div>
+
+  <script src="settings.js"></script>
+</body>
+</html>

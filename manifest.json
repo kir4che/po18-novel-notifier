@@ -1,0 +1,27 @@
+{
+  "manifest_version": 3,
+  "name": "PO18 追更小幫手",
+  "version": "1.0.0",
+  "description": "定時偵測 PO18 小說是否有新章節更新，並發送桌面通知。",
+  "permissions": [
+    "storage",
+    "alarms",
+    "notifications",
+    "cookies",
+    "contextMenus"
+  ],
+  "host_permissions": [
+    "*://*.po18.tw/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "PO18 追更小幫手"
+  },
+  "options_page": "settings.html",
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self'; connect-src https://*.po18.tw;"
+  }
+}
