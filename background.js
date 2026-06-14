@@ -205,11 +205,6 @@ async function checkNovel(novel, allNovels) {
     });
     html = await res.text();
   } catch (err) {
-    if (err.name === "AbortError") {
-      console.error(`[PO18] fetch 逾時（10s）：${novel.url}`);
-    } else {
-      console.error(`[PO18] fetch 失敗：${novel.url}`, err.message);
-    }
     return;
   } finally {
     clearTimeout(timeoutId);
