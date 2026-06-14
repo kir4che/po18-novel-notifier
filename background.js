@@ -1,6 +1,12 @@
 const ALARM_NAME = "po18-check";
 const DEFAULT_INTERVAL_MINUTES = 120;
 
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+
 const ICONS = {
   error: "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48'><rect fill='%23F13392' width='48' height='48'/><text x='24' y='32' text-anchor='middle' fill='white' font-size='28' font-weight='bold'>!<​/text></svg>",
   success: "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48'><rect fill='%2327ae60' width='48' height='48'/><text x='24' y='32' text-anchor='middle' fill='white' font-size='32' font-weight='bold'>✓<​/text></svg>",
@@ -35,7 +41,7 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
           type: "basic",
           iconUrl: ICONS.error,
           title: "PO18 追更小幫手",
-          message: `《${novel.title}》已在追蹤清單中`,
+          message: `《${escapeHtml(novel.title)}》已在追蹤清單中`,
           priority: 1,
         });
         return;
@@ -48,7 +54,7 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
         type: "basic",
         iconUrl: ICONS.success,
         title: "PO18 追更小幫手",
-        message: `已加入追蹤：《${novel.title}》`,
+        message: `已加入追蹤：《${escapeHtml(novel.title)}》`,
         priority: 1,
       });
     } catch (err) {
@@ -221,8 +227,8 @@ async function checkNovel(novel, allNovels) {
     await showNotification(`update-${novel.url}`, {
       type: "basic",
       iconUrl: ICONS.newChapter,
-      title: `《${novel.title}》有新章節！`,
-      message: `最新章節：${latestChapterLabel ?? "（新章節）"}`,
+      title: `《${escapeHtml(novel.title)}》有新章節！`,
+      message: `最新章節：${escapeHtml(latestChapterLabel ?? "（新章節）")}`,
       priority: 2,
     });
   }
@@ -319,12 +325,12 @@ function parseNovelPage(html) {
   if (hrefMatch) {
     latestChapter = hrefMatch[1];
   } else if (chapterText && dateText) {
-    latestChapter = `${chapterText}|${dateText}`; // 付費章節備選
+    latestChapter = `${chapterText}|${dateText}`;
   }
 
   if (!latestChapter) {
     return null;
   }
 
-  return { title, latestChapter, latestChapterLabel: chapterText };
+  return { title: title || "未知書名", latestChapter, latestChapterLabel: chapterText };
 }

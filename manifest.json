@@ -22,6 +22,6 @@
   },
   "options_page": "settings.html",
   "content_security_policy": {
-    "extension_pages": "script-src 'self'; object-src 'self'; connect-src https://*.po18.tw;"
+    "extension_pages": "script-src 'self'; object-src 'self'; connect-src https://www.po18.tw/ https://members.po18.tw/; frame-src 'none'; child-src 'none';"
   }
 }

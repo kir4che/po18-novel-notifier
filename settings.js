@@ -103,6 +103,28 @@ importBtn.addEventListener("click", () => {
   importFile.click();
 });
 
+function isValidNovel(novel) {
+  return (
+    typeof novel.url === 'string' &&
+    isValidPo18Url(novel.url) &&
+    typeof novel.title === 'string' &&
+    novel.title.length > 0
+  );
+}
+
+function isValidPo18Url(url) {
+  try {
+    const parsed = new URL(url);
+    return (
+      parsed.hostname.includes("po18.tw") &&
+      parsed.pathname.includes("/books/") &&
+      !parsed.pathname.includes("/articles/")
+    );
+  } catch {
+    return false;
+  }
+}
+
 importFile.addEventListener("change", async (e) => {
   const file = e.target.files[0];
   if (!file) return;
@@ -120,6 +142,9 @@ importFile.addEventListener("change", async (e) => {
 
     let importCount = 0;
     for (const novel of data.novels) {
+      if (!isValidNovel(novel)) {
+        throw new Error("檔案中包含無效的小說資料");
+      }
       if (!existingUrls.has(novel.url)) {
         novels.push(novel);
         importCount++;
