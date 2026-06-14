@@ -120,7 +120,16 @@ addBtn.addEventListener("click", async () => {
 
 loginBtn.addEventListener("click", () => {
   chrome.tabs.create({ url: "https://members.po18.tw/apps/login.php" });
-  window.addEventListener("focus", updateLoginStatus, { once: true });
+  window.addEventListener("focus", async () => {
+    await updateLoginStatus();
+    const loggedIn = await checkIsLoggedIn();
+    if (loggedIn) {
+      updateCheckBtnState(true, true);
+      statusMsg.innerHTML = '<span class="spinner"></span>登入成功，開始檢查更新…';
+      statusMsg.className = "";
+      chrome.runtime.sendMessage({ type: "MANUAL_CHECK" });
+    }
+  }, { once: true });
 });
 
 checkBtn.addEventListener("click", async () => {
