@@ -18,7 +18,11 @@
   },
   "action": {
     "default_popup": "popup.html",
-    "default_title": "PO18 追更小幫手"
+    "default_title": "PO18 追更小幫手",
+    "default_icon": "p-icon.png"
+  },
+  "icons": {
+    "100": "p-icon.png"
   },
   "options_page": "settings.html",
   "content_security_policy": {
