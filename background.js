@@ -1,5 +1,6 @@
 const ALARM_NAME = "po18-check";
 const DEFAULT_INTERVAL_MINUTES = 120;
+let isCheckingInProgress = false;
 
 function escapeHtml(str) {
   return str
@@ -167,32 +168,55 @@ chrome.notifications.onClicked.addListener((notificationId) => {
 });
 
 async function checkAllNovels() {
+  if (isCheckingInProgress) {
+    return;
+  }
+
+  isCheckingInProgress = true;
   try {
-    const { novels = [] } = await chrome.storage.local.get("novels");
+    const { novels = [], novelssWithUnread = [] } = await chrome.storage.local.get(["novels", "novelssWithUnread"]);
     await chrome.storage.local.set({ checkLog: `找到 ${novels.length} 本小說...` });
 
     const lastCheckTime = Date.now();
+    let updatedNovels = [...novels];
+    let updatedUnread = [...novelssWithUnread];
+    let unreadCount = updatedUnread.length;
 
-    if (novels.length > 0) {
-      for (let i = 0; i < novels.length; i++) {
-        const novel = novels[i];
-        await chrome.storage.local.set({ checkLog: `檢查中 (${i + 1}/${novels.length}): ${novel.title}...` });
-        const result = await checkNovel(novel);
-          if (result === "LOGIN_EXPIRED") {
+    if (updatedNovels.length > 0) {
+      for (let i = 0; i < updatedNovels.length; i++) {
+        const novel = updatedNovels[i];
+        await chrome.storage.local.set({ checkLog: `檢查中 (${i + 1}/${updatedNovels.length}): ${novel.title}...` });
+        const result = await checkNovel(novel, updatedNovels, updatedUnread);
+        if (result === "LOGIN_EXPIRED") {
           await chrome.storage.local.set({ checkLog: "登入已過期，停止檢查" });
           break;
+        }
+        if (result.updatedNovels) {
+          updatedNovels = result.updatedNovels;
+        }
+        if (result.updatedUnread) {
+          updatedUnread = result.updatedUnread;
+          unreadCount = updatedUnread.length;
         }
       }
     } else await chrome.storage.local.set({ checkLog: "沒有追蹤的小說" });
 
-    await chrome.storage.local.set({ lastCheckTime });
+    await chrome.storage.local.set({
+      novels: updatedNovels,
+      novelssWithUnread: updatedUnread,
+      unreadCount,
+      lastCheckTime
+    });
+    updateBadge();
   } catch (err) {
     await chrome.storage.local.set({ checkLog: `檢查失敗: ${err.message}` });
     throw err;
+  } finally {
+    isCheckingInProgress = false;
   }
 }
 
-async function checkNovel(novel) {
+async function checkNovel(novel, updatedNovels, updatedUnread) {
   let html;
 
   let res;
@@ -205,7 +229,7 @@ async function checkNovel(novel) {
     });
     html = await res.text();
   } catch (err) {
-    return;
+    return {};
   } finally {
     clearTimeout(timeoutId);
   }
@@ -224,7 +248,7 @@ async function checkNovel(novel) {
 
   const parsed = parseNovelPage(html);
   if (!parsed) {
-    return;
+    return {};
   }
 
   const { latestChapter, latestChapterLabel, currentChapter } = parsed;
@@ -242,23 +266,23 @@ async function checkNovel(novel) {
     });
   }
 
-  const { novels: allNovels = [], novelssWithUnread = [] } = await chrome.storage.local.get(["novels", "novelssWithUnread"]);
-  const updatedNovels = allNovels.map((n) =>
-    n.url === novel.url
-      ? { ...n, lastChapter: latestChapter, lastChapterLabel: latestChapterLabel, currentChapter }
-      : n
-  );
+  const novelIndex = updatedNovels.findIndex((n) => n.url === novel.url);
+  if (novelIndex !== -1) {
+    updatedNovels[novelIndex] = {
+      ...updatedNovels[novelIndex],
+      lastChapter: latestChapter,
+      lastChapterLabel: latestChapterLabel,
+      currentChapter
+    };
+  }
 
-  const updates = { novels: updatedNovels };
   if (hasNewChapter) {
-    if (!novelssWithUnread.includes(novel.url)) {
-      novelssWithUnread.push(novel.url);
-      updates.novelssWithUnread = novelssWithUnread;
-      updates.unreadCount = novelssWithUnread.length;
+    if (!updatedUnread.includes(novel.url)) {
+      updatedUnread.push(novel.url);
     }
   }
-  await chrome.storage.local.set(updates);
-  updateBadge();
+
+  return { updatedNovels, updatedUnread };
 }
 
 async function fetchNovelInfoFromUrl(url) {

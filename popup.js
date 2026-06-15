@@ -15,8 +15,6 @@ document.addEventListener("DOMContentLoaded", async () => {
   await updateLoginStatus();
   await updateLastCheckTime();
   await renderList();
-  await chrome.storage.local.set({ unreadCount: 0, novelssWithUnread: [] });
-  chrome.action.setBadgeText({ text: "" });
   urlInput.focus();
   updateAddBtnState();
   if (isChecking) {
@@ -159,6 +157,9 @@ chrome.storage.onChanged.addListener(async (changes) => {
       updateCheckBtnState(false, loggedIn);
     }
   }
+  if (changes.novels) {
+    await renderList();
+  }
 });
 
 async function fetchNovelInfo(url) {
@@ -249,7 +250,7 @@ async function deleteNovel(url) {
 }
 
 async function renderList() {
-  const { novels = [] } = await chrome.storage.local.get("novels");
+  const { novels = [], novelssWithUnread = [] } = await chrome.storage.local.get(["novels", "novelssWithUnread"]);
 
   novelList.innerHTML = "";
 
@@ -264,13 +265,26 @@ async function renderList() {
   for (const novel of novels) {
     const li = document.createElement("li");
     li.className = "novel-item";
+    const isUnread = novelssWithUnread.includes(novel.url);
+    const chapterStyle = isUnread ? 'style="color: #F13392;"' : '';
     li.innerHTML = `
       <div class="novel-info">
         <a class="novel-title" href="${escapeHtml(novel.url)}" title="${escapeHtml(novel.title)}" target="_blank">${escapeHtml(novel.title)}</a>
-        <div class="novel-chapter" title="${escapeHtml(novel.lastChapterLabel ?? "")}">最新：${escapeHtml(novel.lastChapterLabel ?? "（未知章節）")}</div>
+        <div class="novel-chapter" ${chapterStyle} title="${escapeHtml(novel.lastChapterLabel ?? "")}">最新：${escapeHtml(novel.lastChapterLabel ?? "（未知章節）")}</div>
       </div>
       <button class="delete-btn" data-url="${escapeHtml(novel.url)}">刪除</button>
     `;
+
+    li.querySelector(".novel-title").addEventListener("click", async () => {
+      const { novelssWithUnread: current = [] } = await chrome.storage.local.get("novelssWithUnread");
+      if (current.includes(novel.url)) {
+        const updated = current.filter((url) => url !== novel.url);
+        await chrome.storage.local.set({
+          novelssWithUnread: updated,
+          unreadCount: updated.length
+        });
+      }
+    });
 
     li.querySelector(".delete-btn").addEventListener("click", async (e) => {
       const targetUrl = e.currentTarget.dataset.url;
