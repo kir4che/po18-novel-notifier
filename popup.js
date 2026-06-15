@@ -15,7 +15,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   await updateLoginStatus();
   await updateLastCheckTime();
   await renderList();
-  await chrome.storage.local.set({ unreadCount: 0 });
+  await chrome.storage.local.set({ unreadCount: 0, novelssWithUnread: [] });
   chrome.action.setBadgeText({ text: "" });
   urlInput.focus();
   updateAddBtnState();

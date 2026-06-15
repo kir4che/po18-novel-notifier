@@ -177,7 +177,7 @@ async function checkAllNovels() {
       for (let i = 0; i < novels.length; i++) {
         const novel = novels[i];
         await chrome.storage.local.set({ checkLog: `檢查中 (${i + 1}/${novels.length}): ${novel.title}...` });
-        const result = await checkNovel(novel, novels);
+        const result = await checkNovel(novel);
           if (result === "LOGIN_EXPIRED") {
           await chrome.storage.local.set({ checkLog: "登入已過期，停止檢查" });
           break;
@@ -192,7 +192,7 @@ async function checkAllNovels() {
   }
 }
 
-async function checkNovel(novel, allNovels) {
+async function checkNovel(novel) {
   let html;
 
   let res;
@@ -242,16 +242,22 @@ async function checkNovel(novel, allNovels) {
     });
   }
 
-  const { unreadCount = 0 } = await chrome.storage.local.get("unreadCount");
+  const { novels: allNovels = [], novelssWithUnread = [] } = await chrome.storage.local.get(["novels", "novelssWithUnread"]);
   const updatedNovels = allNovels.map((n) =>
     n.url === novel.url
       ? { ...n, lastChapter: latestChapter, lastChapterLabel: latestChapterLabel, currentChapter }
       : n
   );
-  await chrome.storage.local.set({
-    novels: updatedNovels,
-    unreadCount: hasNewChapter ? unreadCount + 1 : unreadCount,
-  });
+
+  const updates = { novels: updatedNovels };
+  if (hasNewChapter) {
+    if (!novelssWithUnread.includes(novel.url)) {
+      novelssWithUnread.push(novel.url);
+      updates.novelssWithUnread = novelssWithUnread;
+      updates.unreadCount = novelssWithUnread.length;
+    }
+  }
+  await chrome.storage.local.set(updates);
   updateBadge();
 }
 
