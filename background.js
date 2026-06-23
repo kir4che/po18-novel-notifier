@@ -17,9 +17,10 @@ const ICONS = {
   newChapter: "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48'><rect fill='%2327ae60' width='48' height='48'/><circle cx='24' cy='24' r='14' fill='white' opacity='0.2'/><path d='M18 24 L22 28 L30 20' stroke='white' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'/></svg>",
 };
 
-chrome.runtime.onInstalled.addListener(() => {
+chrome.runtime.onInstalled.addListener(async () => {
   setupAlarm();
   updateBadge();
+  await migrateOldData();
   chrome.contextMenus.create({
     id: "add-po18-book",
     title: "加入 PO18 書籍追蹤",
@@ -28,9 +29,19 @@ chrome.runtime.onInstalled.addListener(() => {
   });
 });
 
-chrome.runtime.onStartup.addListener(() => {
+async function migrateOldData() {
+  const { novels = [] } = await chrome.storage.local.get(["novels"]);
+  const migrated = novels.map((n) => ({ ...n, hasUnread: n.hasUnread ?? false }));
+  if (migrated.length > 0) {
+    const unreadCount = migrated.filter((n) => n.hasUnread === true).length;
+    await chrome.storage.local.set({ novels: migrated, unreadCount });
+  }
+}
+
+chrome.runtime.onStartup.addListener(async () => {
   setupAlarm();
   updateBadge();
+  await migrateOldData();
 });
 
 chrome.contextMenus.onClicked.addListener(async (info, tab) => {
@@ -86,8 +97,15 @@ async function showNotification(id, options) {
   }
 }
 
+chrome.storage.onChanged.addListener((changes) => {
+  if (changes.unreadCount) {
+    updateBadge();
+  }
+});
+
 async function updateBadge() {
-  const { unreadCount = 0 } = await chrome.storage.local.get("unreadCount");
+  const data = await chrome.storage.local.get("unreadCount");
+  const unreadCount = data.unreadCount ?? 0;
   if (unreadCount > 0) {
     chrome.action.setBadgeText({ text: String(unreadCount) });
     chrome.action.setBadgeBackgroundColor({ color: "#c0392b" });
@@ -126,16 +144,20 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   if (message.type === "MANUAL_CHECK") {
     sendResponse({ ok: true });
-    chrome.storage.local.set({ isChecking: true, checkLog: "[開始檢查...]" });
-    checkAllNovels()
-      .then(() => {
-        chrome.storage.local.set({ isChecking: false, checkLog: "[檢查完成]" });
-      })
-      .catch((err) => {
-        const errorMsg = `[錯誤] ${err.message}`;
-        chrome.storage.local.set({ isChecking: false, checkLog: errorMsg });
-      });
+    performCheckWithUI();
     return false;
+  }
+
+  if (message.type === "MARK_AS_READ") {
+    (async () => {
+      const { novels = [] } = await chrome.storage.local.get("novels");
+      const updated = novels.map((n) => (n.url === message.url ? { ...n, hasUnread: false } : n));
+      const unreadCount = updated.filter((n) => n.hasUnread === true).length;
+      await chrome.storage.local.set({ novels: updated, unreadCount });
+      updateBadge();
+      sendResponse({ ok: true });
+    })();
+    return true;
   }
 
   if (message.type === "GET_CHECK_LOG") {
@@ -167,47 +189,61 @@ chrome.notifications.onClicked.addListener((notificationId) => {
   }
 });
 
-async function checkAllNovels() {
-  if (isCheckingInProgress) {
-    return;
+async function performCheckWithUI() {
+  await chrome.storage.local.set({ isChecking: true, checkLog: "[開始檢查...]" });
+  try {
+    await checkAllNovels();
+    await chrome.storage.local.set({ isChecking: false, checkLog: "[檢查完成]" });
+  } catch (err) {
+    const errorMsg = `[錯誤] ${err.message}`;
+    await chrome.storage.local.set({ isChecking: false, checkLog: errorMsg });
   }
+}
+
+async function checkAllNovels() {
+  if (isCheckingInProgress) return;
 
   isCheckingInProgress = true;
   try {
-    const { novels = [], novelssWithUnread = [] } = await chrome.storage.local.get(["novels", "novelssWithUnread"]);
-    await chrome.storage.local.set({ checkLog: `找到 ${novels.length} 本小說...` });
+    let { novels = [] } = await chrome.storage.local.get(["novels"]);
 
-    const lastCheckTime = Date.now();
+    if (novels.length === 0) {
+      await chrome.storage.local.set({ checkLog: "沒有追蹤的小說" });
+      return;
+    }
+
+    novels = novels.map((n) => ({ ...n, hasUnread: n.hasUnread ?? false }));
+
+    await chrome.storage.local.set({ checkLog: `並行檢查 ${novels.length} 本小說...` });
+
+    const results = await Promise.all(novels.map((novel) => checkNovel(novel)));
+
+    if (results.includes("LOGIN_EXPIRED")) {
+      await chrome.storage.local.set({ checkLog: "登入已過期，停止檢查" });
+      return;
+    }
+
     let updatedNovels = [...novels];
-    let updatedUnread = [...novelssWithUnread];
-    let unreadCount = updatedUnread.length;
 
-    if (updatedNovels.length > 0) {
-      for (let i = 0; i < updatedNovels.length; i++) {
-        const novel = updatedNovels[i];
-        await chrome.storage.local.set({ checkLog: `檢查中 (${i + 1}/${updatedNovels.length}): ${novel.title}...` });
-        const result = await checkNovel(novel, updatedNovels, updatedUnread);
-        if (result === "LOGIN_EXPIRED") {
-          await chrome.storage.local.set({ checkLog: "登入已過期，停止檢查" });
-          break;
-        }
-        if (result.updatedNovels) {
-          updatedNovels = result.updatedNovels;
-        }
-        if (result.updatedUnread) {
-          updatedUnread = result.updatedUnread;
-          unreadCount = updatedUnread.length;
-        }
+    for (const result of results) {
+      if (!result || !result.novelUpdate) continue;
+      const { novelUpdate, hasNewChapter } = result;
+      const idx = updatedNovels.findIndex((n) => n.url === novelUpdate.url);
+      if (idx !== -1) {
+        updatedNovels[idx] = novelUpdate;
+        updatedNovels[idx].hasUnread = hasNewChapter === true;
       }
-    } else await chrome.storage.local.set({ checkLog: "沒有追蹤的小說" });
+    }
+
+    const unreadCount = updatedNovels.filter((n) => n.hasUnread === true).length;
 
     await chrome.storage.local.set({
       novels: updatedNovels,
-      novelssWithUnread: updatedUnread,
       unreadCount,
-      lastCheckTime
+      lastCheckTime: Date.now(),
     });
     updateBadge();
+    chrome.runtime.sendMessage({ type: "REFRESH_UI" }).catch(() => {});
   } catch (err) {
     await chrome.storage.local.set({ checkLog: `檢查失敗: ${err.message}` });
     throw err;
@@ -216,9 +252,8 @@ async function checkAllNovels() {
   }
 }
 
-async function checkNovel(novel, updatedNovels, updatedUnread) {
+async function checkNovel(novel) {
   let html;
-
   let res;
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 10000);
@@ -247,12 +282,9 @@ async function checkNovel(novel, updatedNovels, updatedUnread) {
   }
 
   const parsed = parseNovelPage(html);
-  if (!parsed) {
-    return {};
-  }
+  if (!parsed) return {};
 
   const { latestChapter, latestChapterLabel, currentChapter } = parsed;
-
   const hasNewChapter = latestChapter && latestChapter !== novel.lastChapter;
 
   if (hasNewChapter) {
@@ -266,23 +298,10 @@ async function checkNovel(novel, updatedNovels, updatedUnread) {
     });
   }
 
-  const novelIndex = updatedNovels.findIndex((n) => n.url === novel.url);
-  if (novelIndex !== -1) {
-    updatedNovels[novelIndex] = {
-      ...updatedNovels[novelIndex],
-      lastChapter: latestChapter,
-      lastChapterLabel: latestChapterLabel,
-      currentChapter
-    };
-  }
-
-  if (hasNewChapter) {
-    if (!updatedUnread.includes(novel.url)) {
-      updatedUnread.push(novel.url);
-    }
-  }
-
-  return { updatedNovels, updatedUnread };
+  return {
+    novelUpdate: { ...novel, lastChapter: latestChapter, lastChapterLabel: latestChapterLabel, currentChapter },
+    hasNewChapter,
+  };
 }
 
 async function fetchNovelInfoFromUrl(url) {
@@ -293,20 +312,13 @@ async function fetchNovelInfoFromUrl(url) {
     throw new Error("PO18 登入憑證已過期");
   }
 
-  const titleMatch = html.match(/<h1[^>]*class="book_name"[^>]*>([^<]+)<\/h1>/);
-  const title = titleMatch ? titleMatch[1].trim() : "未知書名";
-
-  if (!html.includes('class="new_chapter"')) {
-    throw new Error("無法解析最新章節");
-  }
-
   const parsed = parseNovelPage(html);
   if (!parsed) {
     throw new Error("無法取得章節資訊");
   }
 
   const { title, latestChapter, latestChapterLabel, currentChapter } = parsed;
-  return { url, title, lastChapter: latestChapter, lastChapterLabel: latestChapterLabel, currentChapter, addedAt: Date.now() };
+  return { url, title, lastChapter: latestChapter, lastChapterLabel: latestChapterLabel, currentChapter, addedAt: Date.now(), hasUnread: false };
 }
 
 function isLoginPage(finalUrl, html) {

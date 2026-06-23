@@ -15,6 +15,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   await updateLoginStatus();
   await updateLastCheckTime();
   await renderList();
+  await syncUnreadCount();
   urlInput.focus();
   updateAddBtnState();
   if (isChecking) {
@@ -25,7 +26,10 @@ document.addEventListener("DOMContentLoaded", async () => {
   }
 });
 
-window.addEventListener("focus", updateLoginStatus);
+window.addEventListener("focus", async () => {
+  await updateLoginStatus();
+  await renderList();
+});
 setInterval(updateLoginStatus, 5000);
 
 urlInput.addEventListener("input", updateAddBtnState);
@@ -157,7 +161,7 @@ chrome.storage.onChanged.addListener(async (changes) => {
       updateCheckBtnState(false, loggedIn);
     }
   }
-  if (changes.novels) {
+  if (changes.novels || changes.novelssWithUnread || changes.unreadCount) {
     await renderList();
   }
 });
@@ -226,10 +230,10 @@ async function fetchNovelInfo(url) {
 
   let finalLabel = lastChapterLabel;
   if (finalLabel && currentChapter !== null) {
-    finalLabel = `${finalLabel}(${currentChapter})`;
+    finalLabel = `${finalLabel}（${currentChapter}）`;
   }
 
-  return { url, title, lastChapter, lastChapterLabel: finalLabel, currentChapter, addedAt: Date.now() };
+  return { url, title, lastChapter, lastChapterLabel: finalLabel, currentChapter, addedAt: Date.now(), hasUnread: false };
 }
 
 async function saveNovel(novel) {
@@ -244,13 +248,30 @@ async function saveNovel(novel) {
 }
 
 async function deleteNovel(url) {
-  const { novels = [] } = await chrome.storage.local.get("novels");
-  const updated = novels.filter((n) => n.url !== url);
-  await chrome.storage.local.set({ novels: updated });
+  const { novels = [] } = await chrome.storage.local.get(["novels"]);
+  const updatedNovels = novels.filter((n) => n.url !== url);
+  const unreadCount = updatedNovels.filter((n) => n.hasUnread === true).length;
+  await chrome.storage.local.set({
+    novels: updatedNovels,
+    unreadCount
+  });
+}
+
+async function syncUnreadCount() {
+  const { novels = [] } = await chrome.storage.local.get(["novels"]);
+  const unreadCount = novels.filter((n) => n.hasUnread === true).length;
+  await chrome.storage.local.set({ unreadCount });
 }
 
 async function renderList() {
-  const { novels = [], novelssWithUnread = [] } = await chrome.storage.local.get(["novels", "novelssWithUnread"]);
+  let { novels = [] } = await chrome.storage.local.get(["novels"]);
+
+  const needsMigration = novels.some((n) => n.hasUnread === undefined);
+  if (needsMigration) {
+    novels = novels.map((n) => ({ ...n, hasUnread: n.hasUnread ?? false }));
+    const unreadCount = novels.filter((n) => n.hasUnread === true).length;
+    await chrome.storage.local.set({ novels, unreadCount });
+  }
 
   novelList.innerHTML = "";
 
@@ -265,25 +286,20 @@ async function renderList() {
   for (const novel of novels) {
     const li = document.createElement("li");
     li.className = "novel-item";
-    const isUnread = novelssWithUnread.includes(novel.url);
-    const chapterStyle = isUnread ? 'style="color: #F13392;"' : '';
+    const isUnread = novel.hasUnread === true;
+    const chapterClass = isUnread ? 'class="novel-chapter unread"' : 'class="novel-chapter"';
     li.innerHTML = `
       <div class="novel-info">
         <a class="novel-title" href="${escapeHtml(novel.url)}" title="${escapeHtml(novel.title)}" target="_blank">${escapeHtml(novel.title)}</a>
-        <div class="novel-chapter" ${chapterStyle} title="${escapeHtml(novel.lastChapterLabel ?? "")}">最新：${escapeHtml(novel.lastChapterLabel ?? "（未知章節）")}</div>
+        <div ${chapterClass} title="${escapeHtml(novel.lastChapterLabel ?? "")}">最新：${escapeHtml(novel.lastChapterLabel ?? "（未知章節）")}</div>
       </div>
       <button class="delete-btn" data-url="${escapeHtml(novel.url)}">刪除</button>
     `;
 
-    li.querySelector(".novel-title").addEventListener("click", async () => {
-      const { novelssWithUnread: current = [] } = await chrome.storage.local.get("novelssWithUnread");
-      if (current.includes(novel.url)) {
-        const updated = current.filter((url) => url !== novel.url);
-        await chrome.storage.local.set({
-          novelssWithUnread: updated,
-          unreadCount: updated.length
-        });
-      }
+    li.querySelector(".novel-title").addEventListener("click", async (e) => {
+      e.preventDefault();
+      await chrome.runtime.sendMessage({ type: "MARK_AS_READ", url: novel.url });
+      chrome.tabs.create({ url: novel.url });
     });
 
     li.querySelector(".delete-btn").addEventListener("click", async (e) => {
@@ -325,6 +341,13 @@ function showStatus(msg, type = "") {
   statusMsg.textContent = msg;
   statusMsg.className = type;
 }
+
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message.type === "REFRESH_UI") {
+    renderList().then(() => sendResponse({ ok: true }));
+    return true;
+  }
+});
 
 function escapeHtml(str) {
   return str
